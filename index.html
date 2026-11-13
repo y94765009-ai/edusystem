@@ -503,14 +503,14 @@ function showErr(err){
  if(modal.open){let p=$('modalErr');if(!p){p=document.createElement('p');p.id='modalErr';p.className='err';p.setAttribute('role','alert');modal.insertBefore(p,modal.firstChild)}p.textContent=m}else toast(m);
 }
 async function loadData(){
- const d=await api('data');
+ const [d,al]=await Promise.all([api('data'),role==='admin'?api('accountsList'):null]);
  db={criteria:d.criteria,buildings:d.buildings,rooms:d.rooms,people:d.people,lectures:d.lectures,accounts:[]};
  team=d.team||[];programsList=d.programs.map(p=>p.name);permissionOverrides=d.permissions||{};
  for(const k of Object.keys(demoTranslations))delete demoTranslations[k];
  d.programs.forEach(p=>{if(p.en)demoTranslations[p.name]=p.en});
  [].concat(d.buildings,d.people,d.criteria).forEach(o=>{if(o.en)demoTranslations[o.name]=o.en});
  d.lectures.forEach(l=>{if(l.courseEn)demoTranslations[l.course]=l.courseEn});
- if(role==='admin')db.accounts=(await api('accountsList')).accounts;
+ if(al)db.accounts=al.accounts;
  lastLoad=Date.now();
 }
 async function startSession(user){
