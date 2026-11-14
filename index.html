@@ -484,13 +484,15 @@ const teamAccounts=()=>API?team.map(a=>Object.assign({},a,{program:(a.programs||
 const ERR_EN={bad_credentials:'Incorrect email or password.',locked:'Account temporarily locked after too many attempts. Try again later.',pending:'Your account is awaiting administrator approval.',disabled:'This account is not active. Contact the administrator.',unauthorized:'Session expired. Please sign in again.',forbidden:'You are not allowed to do this.',weak_password:'Password must be at least 8 characters with letters and digits.',bad_domain:'Please use your university email.',exists:'This email is already registered.',locked_eval:'This evaluation is approved and locked.',network:'Could not reach the server. Check your connection.',must_change_password:'You must change your password first.',in_use:'Cannot delete: this item is used by other data.',conflict:'Room or lecturer conflict at this time.',duplicate:'Duplicate name.',note_required:'Enter a reason for returning the evaluation.',not_submitted:'The coordinator has not submitted it yet.',setup_required:'Backend is not set up yet.'};
 const errMsg=e=>lang==='ar'||!ERR_EN[e.code]?e.message:ERR_EN[e.code];
 function barUpdate(){const b=$('bar');if(b)b.classList.toggle('on',pendingCalls>0)}
+const FRESH=new Set(['saveEval','saveReply','submitApproval','decide','saveAdvice','upsert','remove','importRows','saveAssignments','accountSave','accountReset','closeDay']);
 async function api(action,payload){
  if(/PASTE_/.test(API_URL)){const e=new Error(T('لم يُضبط رابط الخادم بعد (API_URL).','Server URL (API_URL) is not configured yet.'));e.code='config';throw e}
  pendingCalls++;barUpdate();
  try{
-  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token},payload||{}))});
+  const wr=FRESH.has(action);const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token},payload||{},wr?{fresh:true}:{}))});
   const j=await res.json();
   if(!j.ok){const e=new Error(j.message||'error');e.code=j.code;throw e}
+  if(wr&&j.data&&j.data.fresh){applyData(j.data.fresh,j.data.accounts||null);return j.data.result}
   return j.data;
  }catch(e){
   if(!e.code){e.code='network';e.message=T('تعذّر الاتصال بالخادم. تحقّقي من الإنترنت.','Could not reach the server. Check your connection.')}
@@ -504,6 +506,9 @@ function showErr(err){
 }
 async function loadData(pre){
  const [d,al]=pre?[pre.data,pre.accounts||null]:await Promise.all([api('data'),role==='admin'?api('accountsList'):null]);
+ applyData(d,al);
+}
+function applyData(d,al){
  db={criteria:d.criteria,buildings:d.buildings,rooms:d.rooms,people:d.people,lectures:d.lectures,accounts:[]};
  team=d.team||[];programsList=d.programs.map(p=>p.name);permissionOverrides=d.permissions||{};
  for(const k of Object.keys(demoTranslations))delete demoTranslations[k];
@@ -558,7 +563,7 @@ async function saveRemote(x,f){
  try{
   if(role==='observer')await api('saveEval',{lectureId:x.id,scores:crit(x.kind).map((c,i)=>f['s'+i]),attendance:f.attendance,overallScore:f.overallScore,note:f.note});
   else await api('saveReply',{lectureId:x.id,reply:f.reply,suggestion:f.suggestion});
-  modal.close();await loadData();render();toast(T('تم الحفظ.','Saved.'));
+  modal.close();render();toast(T('تم الحفظ.','Saved.'));
  }catch(err){showErr(err)}
 }
 async function approvalRemote(x,fields,submitter){
@@ -569,11 +574,11 @@ async function approvalRemote(x,fields,submitter){
    if(decision==='return'&&!note){$('approvalError').textContent=T('اكتبي سبب الإعادة للمراجعة.','Enter a reason for returning the evaluation.');return}
    await api('decide',{lectureId:x.id,decision,note});
   }
-  modal.close();await loadData();render();detail(x.id);
+  modal.close();render();detail(x.id);
  }catch(err){showErr(err)}
 }
 async function adviceRemote(x,text){
- try{await api('saveAdvice',{lectureId:x.id,text});modal.close();await loadData();render();detail(x.id)}catch(err){showErr(err)}
+ try{await api('saveAdvice',{lectureId:x.id,text});modal.close();render();detail(x.id)}catch(err){showErr(err)}
 }
 function showSecret(pw){
  modal.innerHTML='<h2>'+T('كلمة المرور المؤقتة','Temporary password')+'</h2><p>'+T('سلّميها للمستخدم بشكل آمن. لن تظهر مرة أخرى، وسيُطلب منه تغييرها عند أول دخول.','Hand it to the user securely. It will not be shown again and must be changed at first sign-in.')+'</p><code class="secret" dir="ltr">'+esc(pw)+'</code>'+button(T('عودة','Back'),'modal.close()');
@@ -586,20 +591,20 @@ async function entityRemote(key,id,data){
    const row=Object.assign({},data,{programs:fd.getAll('programs'),personId:data.personId?+data.personId:null});
    if(id)row.id=id;
    const r=await api('accountSave',{account:row});
-   modal.close();await loadData();render();
+   modal.close();render();
    if(r.tempPassword)showSecret(r.tempPassword);
    return;
   }
   await api('upsert',{entity:key,row:Object.assign({},data,id?{id}:{})});
-  modal.close();await loadData();render();
+  modal.close();render();
  }catch(err){$('notice').textContent=errMsg(err)}
 }
 async function removeRemote(key,id){
- try{await api('remove',{entity:key,id});modal.close();await loadData();render()}catch(err){$('notice').textContent=errMsg(err)}
+ try{await api('remove',{entity:key,id});modal.close();render()}catch(err){$('notice').textContent=errMsg(err)}
 }
 async function importRemote(rows){
  try{
-  const r=await api('importRows',{entity,rows});await loadData();render();
+  const r=await api('importRows',{entity,rows});render();
   $('importMsg').textContent=T('تم استيراد ','Imported ')+r.added+T(' صف.',' row(s).')+(r.errors.length?' '+T('تعذّر ','Skipped ')+r.errors.length+': '+r.errors.slice(0,5).join(' | '):'');
  }catch(err){$('importMsg').textContent=errMsg(err)}
 }
@@ -667,7 +672,7 @@ async function assignSave(){
  const items=rows.map(x=>({lectureId:x.id,observerId:effObs(x)===''?null:(API?+effObs(x):effObs(x))}));
  const seen={};for(const l of db.lectures){const oid=Object.prototype.hasOwnProperty.call(assignDraft,l.id)?assignDraft[l.id]:(l.observer==null?'':l.observer);if(oid===''||oid==null)continue;const k=oid+'|'+l.date+'|'+l.time;if(seen[k]){toast(T('متابع واحد مسند لجلستين في نفس الموعد.','One observer is assigned to two sessions at the same time.'));return}seen[k]=1}
  try{
-  if(API){await api('saveAssignments',{items});await loadData()}
+  if(API){await api('saveAssignments',{items})}
   else{items.forEach(it=>{const l=db.lectures.find(y=>y.id===it.lectureId);if(l){if(it.observerId==null)delete l.observer;else l.observer=it.observerId}});save()}
   assignDraft={};render();toast(T('تم حفظ التوزيع.','Distribution saved.'));
  }catch(err){toast(errMsg(err))}
