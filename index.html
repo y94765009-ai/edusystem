@@ -502,8 +502,8 @@ function showErr(err){
  const m=errMsg(err);
  if(modal.open){let p=$('modalErr');if(!p){p=document.createElement('p');p.id='modalErr';p.className='err';p.setAttribute('role','alert');modal.insertBefore(p,modal.firstChild)}p.textContent=m}else toast(m);
 }
-async function loadData(){
- const [d,al]=await Promise.all([api('data'),role==='admin'?api('accountsList'):null]);
+async function loadData(pre){
+ const [d,al]=pre?[pre.data,pre.accounts||null]:await Promise.all([api('data'),role==='admin'?api('accountsList'):null]);
  db={criteria:d.criteria,buildings:d.buildings,rooms:d.rooms,people:d.people,lectures:d.lectures,accounts:[]};
  team=d.team||[];programsList=d.programs.map(p=>p.name);permissionOverrides=d.permissions||{};
  for(const k of Object.keys(demoTranslations))delete demoTranslations[k];
@@ -513,11 +513,11 @@ async function loadData(){
  if(al)db.accounts=al.accounts;
  lastLoad=Date.now();
 }
-async function startSession(user){
+async function startSession(user,pre){
  account=Object.assign({},user,{person:user.personId,program:(user.programs||[])[0]});
  role=user.role;
  if(user.mustChange){screen='password';render();return}
- await loadData();
+ await loadData(pre);
  coordinatorProgram=role==='coord'?user.programs[0]:programsList[0];
  filters={date:'',person:'',state:''};historyStack=['home'];
  prog=role==='coord'?user.programs[0]:(role==='observer'&&user.programs.length===1?user.programs[0]:null);
@@ -530,7 +530,7 @@ function loginViewApi(){
  $('toRegister').onclick=e=>{e.preventDefault();go('register')};
  $('loginForm').onsubmit=async e=>{
   e.preventDefault();const f=e.currentTarget.elements;$('loginError').textContent='';
-  try{const r=await api('login',{email:f.email.value,password:f.password.value});token=r.token;try{sessionStorage.setItem('eduToken',token)}catch(_e){}await startSession(r.user)}
+  try{const r=await api('login',{email:f.email.value,password:f.password.value});token=r.token;try{sessionStorage.setItem('eduToken',token)}catch(_e){}await startSession(r.user,r.data?{data:r.data,accounts:r.accounts}:null)}
   catch(err){$('loginError').textContent=errMsg(err)}
  };
 }
