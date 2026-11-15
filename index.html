@@ -536,12 +536,13 @@ function bg(action,payload){
  syncing++;barUpdate();
  syncQ=syncQ.then(()=>api(action,payload,{skipApply:()=>syncing>1})).catch(err=>{toast(errMsg(err));loadData().then(render).catch(()=>{})}).finally(()=>{syncing--;barUpdate()});
 }
+function perfShow(a,total,srv){try{if(role!=='admin')return;let n=document.getElementById('perfNote');if(!n){n=document.createElement('div');n.id='perfNote';n.style.cssText='position:fixed;bottom:6px;inset-inline-start:8px;font:11px system-ui;color:#52647a;background:#ffffffd9;padding:2px 7px;border-radius:8px;z-index:5;pointer-events:none';document.body.appendChild(n)}n.textContent='⏱ '+a+' · '+total+'ms'+(srv!=null?' (خادم '+srv+'ms · شبكة '+(total-srv)+'ms)':'')}catch(_e){}}
 async function api(action,payload,opt){
  if(/PASTE_/.test(API_URL)){const e=new Error(T('لم يُضبط رابط الخادم بعد (API_URL).','Server URL (API_URL) is not configured yet.'));e.code='config';throw e}
  pendingCalls++;barUpdate();
  try{
-  const wr=FRESH.has(action);const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token},loadedRange||{},payload||{},wr?{fresh:true}:{}))});
-  const j=await res.json();
+  const t0=Date.now(),wr=FRESH.has(action);const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({action,token},loadedRange||{},payload||{},wr?{fresh:true}:{}))});
+  const j=await res.json();perfShow(action,Date.now()-t0,j.ms);
   if(!j.ok){const e=new Error(j.message||'error');e.code=j.code;throw e}
   if(wr&&j.data&&j.data.fresh){if(!(opt&&opt.skipApply&&opt.skipApply()))applyData(j.data.fresh,j.data.accounts||null);return j.data.result}
   return j.data;
